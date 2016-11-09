@@ -1,0 +1,38 @@
+;; load-path
+(add-to-list 'load-path "~/.emacs.d/elisp/")
+
+;; math-mode (new/debugged version due to Philipp Kant)
+(autoload 'math "math" "Starts Mathematica" t)
+(autoload 'math-mode "math"
+  "Mode for editing Mathematica.  Loading will result in more info." t)
+(setq auto-mode-alist (cons '("\\.m" . math-mode) auto-mode-alist))
+(setq auto-mode-alist (cons '("\\.nb" . math-mode) auto-mode-alist))
+;; fix ^M display
+(defun fix-math-display ()
+  "Handle display of ^M in Mathematica buffer."
+  (interactive)
+  (setq buffer-display-table (make-display-table))
+  (aset buffer-display-table ?\^M [?\n]))
+(add-hook 'math-mode-hook 'fix-math-display)
+
+;; mathem-mode
+(autoload 'mathem-mode "mathem-mode"
+  "Major mode for editing MATHEMATICA-files" t)
+(setq auto-mode-alist (cons '("\\.m\$" . mathem-mode) auto-mode-alist))
+(setq auto-mode-alist (cons '("\\.nb\$" . mathem-mode) auto-mode-alist))
+;; alter indentation
+(setq mathem-tab-always-indent t
+      mathem-tab-to-comment nil
+      mathem-nochange ""
+      mathem-indent-level 2
+      mathem-continued-statement-offset 2
+      mathem-continued-brace-offset -2
+      mathem-brace-offset 0
+      mathem-brace-imaginary-offset 0
+      mathem-label-offset -2)
+;; deactivate indentation
+;;(setq mathem-mode-auto-indent nil)
+
+(add-hook 'mathem-mode-hook (lambda () (outline-minor-mode +1)
+                              (setq outline-regexp "(\\* --[-]+"))) ;; mathem
+

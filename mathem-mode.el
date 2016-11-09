@@ -407,6 +407,7 @@ or centered if LINE is nil. (math-recenter-output-buffer LINE)"
   (define-key mathem-mode-map "\t" 'tab-to-tab-stop)
   (define-key mathem-mode-map [M-down] 'mathem-goto-math-window)
   (define-key mathem-mode-map "\M-\C-m" 'math-eval-block-or-line)
+  (define-key mathem-mode-map [M-return] 'math-eval-block-or-line)
   (define-key mathem-mode-map [C-return] 'math-eval-expression)
   (define-key mathem-mode-map [C-M-return] 'math-buffer)
   (define-key mathem-mode-map "\C-c\C-c" 'math-eval-active-region)
@@ -700,14 +701,14 @@ If at end-of-line, and not in a comment or a quote, correct the's indentation."
 	   (beginning-of-line)
 	   (and (not			; eliminate comments quickly
 		 (re-search-forward comment-start-skip insertpos t))
-		(or (/= last-command-char ?:)
+		(or (/= last-command-event ?:)
 		    ;; Colon is special only after a label ....
 		    (looking-at "\\s-*\\(\\w\\|\\s_\\)+$"))
 		(let ((pps (parse-partial-sexp
 			    (mathem-beginning-of-function) insertpos)))
 		  (not (or (nth 3 pps) (nth 4 pps) (nth 5 pps))))))
 	 (progn				; must insert, indent, delete
-	   (insert-char last-command-char 1)
+	   (insert-char last-command-event 1)
 	   (mathem-indent-line)
 	   (delete-char -1))))
   (self-insert-command (prefix-numeric-value arg)))

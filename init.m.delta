@@ -1,0 +1,24 @@
+(* --- for emacs' math-mode ----------------------------------------- *)
+
+(* cookie (by Robert Harlander?) *)
+If[Environment["MATHINDENTCOOKIE"] =!= $Failed,
+   $BatchInput = False;
+   If[NameQ["System`Private`$IndentSuffix"],
+      ToExpression[
+        "System`Private`$IndentSuffix = " <>
+          "Environment[\"MATHINDENTCOOKIE\"]"];
+      Print[" ", Environment["MATHINDENTCOOKIEMSG"]]]];
+
+(* graphical output (by Thomas Hahn) *)
+If[$FrontEnd === Null && Environment["DISPLAY"] =!= $Failed,
+   GhostView[obj_] :=
+     Block[
+       {tmp},
+       tmp = FileNameJoin[
+         {$TemporaryDirectory, ToString[Unique["gvtmp"]] <> ".eps"}];
+       Export[tmp, obj, "EPS"];
+       Run["(gv " <> tmp <> "; rm " <> tmp <> ") &"];
+       obj];
+   Protect[GhostView];
+   $DisplayFunction = GhostView];
+

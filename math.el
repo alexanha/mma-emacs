@@ -34,9 +34,9 @@
 ;;      Version info is in math-version-string defined after history box
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; LCD Archive Entry:
-;; math|David Jacobson|jacobson@hpl.hp.com|
+;; math.el|David Jacobson|jacobson@hpl.hp.com
 ;; Mode package for running Mathematica
-;; $Date: 1994/10/18 15:14:56 $|$Revision: 1.106 $|~/modes/math.el.Z|
+;; $Date: 1994/06/20 22:08:34 $|$Revision: 1.104 $|
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 ;; 2/17/1991 Dan Dill dan@chem.bu.edu
@@ -188,14 +188,32 @@
 ;;  variables with the variable process-envoronment.  Also hack mode
 ;;  message regarding sending of interrupts.
 ;;
-;; 06/21/94 David Jacobson jacobson@hpl.hp.com
-;;  Fix LCD archive entry.  math-version-string left unchanged
+;; 01/14/98 Robert Harlander rh@particle.physik.uni-karlsruhe.de
+;;  Added the function math-copy-line-to-buffer and key-binding.
 ;;
-;; 10/18/94 David Jacobson jacobson@hpl.hp.com
-;;  Fix recommended installation comments
+;; 09/13/99 Robert Harlander rh@particle.physik.uni-karlsruhe.de
+;;  Added functions
+;;    math-copy-previous-cell
+;;    math-copy-next-cell
+;;    math-copy-pattern
+;;    math-copy-previous-cell-pattern
+;;  This set of functions is concerned with repeating earlier commands
+;;  without having to scroll the buffer. By default,
+;;  math-copy-previous-cell is bound to [C-up] and
+;;  math-copy-next-cell to [C-down].
+;;  If you keep hitting these keys repeatedly, you can scroll through the
+;;  command history, just like in tcsh.
+;;  By hitting [C-S-up], you are prompted for pattern that should be
+;;  looked for in the command history.
+;;
+;; 02/05/01 Robert Harlander rharlan@bnl.gov
+;;  Added funcion
+;;    math-beginning-of-line
+;; If in In[..] or Out[..] line, goes to beginning of cell.
+;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defconst math-version-string
-  "Mathematica mode experimental version of October 18, 1994 for Mathematica version 2.2."
+  "Mathematica mode experimental version of June 20, 1994 for Mathematica version 2.2."
   "String describing this version of math.el.")
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Installation and use:
@@ -289,6 +307,43 @@
 ;;  deep-copy-keymap.
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
  
+(defun math-complete-file-name () "Does file name completion if line starts with <<. Otherwise, it calls 'complete-math-symbol'."
+  (interactive)
+  (save-excursion
+    (beginning-of-line)
+    (setq bound (point))
+    )
+  (save-excursion
+    (setq beg (point))
+    (if (search-backward-regexp "<< *" bound t)
+        (progn
+          (goto-char beg)
+          (search-backward-regexp "\\(<< *\\|\\/\\)" bound t)
+          (goto-char (match-end 1))
+          (setq end (point))
+          (setq subfilename (buffer-substring beg end))
+          (if (eq (preceding-char) ?\/)
+              (progn
+                (search-backward-regexp "<< *" bound t)
+                (goto-char (match-end 0))
+                (setq dir (buffer-substring (point) end))
+                )
+            (setq dir "./")
+            )
+          (setq filename (file-name-completion subfilename dir))
+          (if (not (eq filename nil))
+              (if (not (eq filename t))
+                  (progn (kill-region beg (point))
+                         (insert (concat dir filename))))
+            (message (concat "No match for " subfilename "."))
+            )
+          )
+      (math-complete-symbol)
+      )
+    )
+  (end-of-line)
+  )
+
 (defconst emacs-version-18 (string= (substring emacs-version 0 3) "18.")
 "t if version 18 of emacs, else nil")
 
@@ -299,10 +354,18 @@
   "*A list of directories in which to look for files.  
 Use nil for the current directory.")
 
-(defvar math-process-string "/usr/local/bin/math"
+(defvar math-process-string "math"
+;; (defvar math-process-string "math"
   "*A string to pass to the unix exec function to start Mathematica")
 
-(defvar math-process-buffer 
+(defvar math-process-args ""
+ "the command line arguments to the math-process")
+
+;; (if (string-equal (system-name) "sun2.bnl.gov")
+;;     (setq math-process-string "math401")
+;;   (setq math-process-string "/afs/cern.ch/project/parc/math41/bin/math"))
+
+(defvar math-process-buffer
   "*math*"
   "The buffer normally running Mathematica.  Certain commands
 (e.g. math-complete-symbol) will go to this buffer to find a Mathematica 
@@ -357,9 +420,10 @@ using a remote host.  1 is recommended in this case. (See
 math-remote-host and math-remote-shell.)")
 
 (defvar math-remote-shell 
-  (cond ((file-exists-p "/usr/ucb/rsh")	"/usr/ucb/rsh")
-	((file-exists-p "/usr/bsd/rsh")	"/usr/bsd/rsh")
-	((file-exists-p "/usr/bin/remsh") "/usr/bin/remsh"))
+  (cond ((file-exists-p "/usr/bin/ssh") "/usr/bin/ssh")
+        ((file-exists-p "/usr/ucb/rsh") "/usr/ucb/rsh")
+        ((file-exists-p "/usr/bsd/rsh") "/usr/bsd/rsh")
+        ((file-exists-p "/usr/bin/remsh") "/usr/bin/remsh"))
   "*String used with `math-remote-host' to run Mathematica remotely.")
 
 (defconst math-valid-cell-ending-re 
@@ -495,6 +559,22 @@ function math-complete-symbol.")
   ;; for describe mode
   (define-key math-mode-map "\C-c\C-x" 'math-transform-float)
   (define-key math-mode-map "\C-c\C-v" 'math-remove-symbol)
+  (define-key math-mode-map "\C-cc" 'math-copy-line-to-buffer)
+  ;;
+  ;; added by rh, Apr 1 1998
+  ;;
+  (define-key math-mode-map [S-select] 'recenter)
+  (define-key math-mode-map "\t" 'math-complete-file-name)
+  ;;
+  ;; added by rh, Feb 2001
+  ;;
+  (define-key math-mode-map "\C-a" 'math-beginning-of-line)
+  ;;
+  ;; added by rh, Feb 2002
+  ;;
+  (define-key math-mode-map [C-up] 'math-copy-previous-cell)
+  (define-key math-mode-map [C-down] 'math-copy-next-cell)
+  (define-key math-mode-map [C-S-up] 'math-copy-pattern)
   )
 
 (defvar math-mode-syntax-table nil
@@ -1048,7 +1128,7 @@ math-display-var, and math-remote-shell."
   (if emacs-version-18 (shell-mode) (comint-mode))
   (kill-all-local-variables)
   (setq major-mode 'math-mode)
-  (setq mode-name "Mathematica")
+  (if math-remote-host (setq mode-name (concat "Mathematica on " math-remote-host)) (setq mode-name "Mathematica local"))
   ;(setq mode-line-process '(": %s"))
   (setq mode-line-process '(": " mathematica-state))
   (use-local-map math-mode-map)
@@ -1072,15 +1152,36 @@ math-display-var, and math-remote-shell."
   (make-local-variable 'math-indent-cookie-pending)
   ; Position of end of last input to Mathematica
   (make-local-variable 'math-last-input-end)
-
+  (make-local-variable 'font-lock-defaults)
+  (setq font-lock-defaults '((math-font-lock-keywords)
+                             nil nil ((?\_ . "w"))))
   (run-hooks 'math-mode-hook))
 
+(defconst math-font-lock-keywords
+  (list
+   ;; Fontify function and package names in declarations.
+   ;; parameters:  var_
+   '("^\\(In\\)\\[\\([0-9]+\\)" (1 font-lock-reference-face)
+     (2 font-lock-constant-face))
+   '("^\\(Out\\)\\[\\([0-9]+\\)" (1 font-lock-type-face)
+     (2 font-lock-constant-face))
+   ;; parameters:  var_
+   '("\\([a-zA-Z][a-zA-Z0-9]*\\_\\)" 1 font-lock-constant-face)
+   ;; functions: func[...], Expand[...]
+  '("\\([a-zA-Z0-9]+\\)\\[" 1 font-lock-function-name-face)
+  '("\\(\\[\\|\\]\\)" 1 font-lock-constant-face)
+  '("\\((\\|)\\)" 1 font-lock-reference-face)
+  '("\\(\\{\\|\\}\\)" 1 font-lock-type-face)
+  '("\\([a-zA-Z0-9]+\\)" 1 font-lock-variable-name-face)
+  ;; filenames: <<filename.m
+  '("<< *\\([^; ]+\\)\\($\\|[; ]\\)" 1 font-lock-string-face))
+  "Subdued level highlighting for math-mode.")
 
 (defun math ()
   "Run Mathematica, input and output via buffer *math*."
   (interactive)
   (pop-to-buffer (start-math-process
-		  "*math*" "math" math-process-string))
+		  "*math*" "math" math-process-string "" math-process-args))
   ;; We don't make this one local.  That way if the
   ;; user changes the name of the buffer, say by writing
   ;; it to a file, math-process-buffer still points
@@ -1094,7 +1195,7 @@ math-display-var, and math-remote-shell."
 (defun start-math ()
   "Starts a Mathematica process in the current buffer."
   (interactive "*")
-  (start-math-process (current-buffer) "math" math-process-string)
+  (start-math-process (current-buffer) "math" math-process-string "" math-process-args)
   (make-local-variable 'math-process-buffer)
   (setq math-process-buffer (current-buffer))
   (set-process-filter (get-buffer-process math-process-buffer) 
@@ -1420,7 +1521,8 @@ signalled.  The conditons checked for are
 					    math-indent-cookie-message)
 				    program
 				    switches
-				    "\"")) " "))))); have mapconcat put spaces between
+				    "\"")) " "))))
+			        (setq mode-name (concat "Mathematica on " math-remote-host))); have mapconcat put spaces between
 		;; The local case
 		(setq 
 		 proc-args
@@ -1951,6 +2053,136 @@ enclosing expression."
 	'math-electric-self-insert
 	'self-insert-command)))
 
+
+
+(defun math-copy-previous-cell ()
+  "Copy next to last cell to last cell. If you bind it to a key, successive typing of that key will scroll through the In[..] history. Note that you should have only one keybinding for this function."
+  (interactive)
+  (setq dum (car (cdr (reverse (listify-key-sequence (recent-keys))))))
+  (if (not (or
+       (member dum (listify-key-sequence
+                    (car (where-is-internal
+                          'math-copy-previous-cell math-mode-map))))
+       (member dum (listify-key-sequence
+                    (car (where-is-internal
+                          'math-copy-next-cell math-mode-map))))))
+      (setq math-cell-point nil))
+  (math-copy-previous-cell-pattern "")
+)
+
+(defun math-copy-pattern (pattern)
+  "Prompts for a pattern to search the In[..] cells for. Copy matching cells down to last cell."
+  (interactive "sPattern: ")
+  (setq math-cell-point nil)
+  (math-copy-previous-cell-pattern pattern)
+)
+
+(defun math-copy-previous-cell-pattern (pattern)
+  "Called by math-copy-previous-cell and math-copy-pattern."
+  ;;
+  ;; kill any text after last In[..]:
+  ;;
+  (goto-char (point-max))
+  (search-backward-regexp "^In\[[0-9]*\]\\:=" (point-min) t)
+  (search-forward-regexp "^In\[[0-9]*\]\\:=" (point-max) t)
+  (insert " ")
+  (delete-region (point) (point-max))
+  ;;
+  ;; go to cell before math-cell-point:
+  ;;
+  (if (not math-cell-point)
+      (progn (search-backward-regexp (concat "^In\[[0-9]*\]\\:=")
+                                     (point-min) t)
+             (setq math-cell-point (point-max)))
+    (goto-char math-cell-point))
+  (if (search-backward-regexp (concat "^In\[[0-9]*\]\\:=" " *" pattern)
+                              (point-min) t)
+      (search-forward-regexp "^In\[[0-9]*\]\\:=" (point-max) t)
+    (forward-char 1))
+  ;;
+  ;; reset math-cell-point:
+  ;;
+;  (if (and (not pattern) (= math-cell-point (- (point) 1)))
+  (if (= math-cell-point (- (point) 1))
+      (message "Already at first cell."))
+  (setq math-cell-point (- (point) 1))
+  ;;
+  ;; copy cell to last cell:
+  ;;
+  (math-copy-cell "" nil (point))
+  ;;
+  ;; position cursor properly:
+  ;;
+  (search-backward-regexp "^In\[[0-9]*\]\\:=" (point-min) t)
+  (search-forward-regexp "^In\[[0-9]*\]\\:=" (point-max) t)
+  (forward-char 1)
+;  (message "%s" (print math-cell-point))
+  )
+
+(defun math-copy-next-cell ()
+  "When using math-copy-previous-cell, goes back one step."
+  (interactive)
+  ;;
+  ;; kill any text after last In[..]:
+  ;;
+  (goto-char (point-max))
+  (search-backward-regexp "^In\[[0-9]*\]\\:=" (point-min) t)
+  (search-forward-regexp "^In\[[0-9]*\]\\:=" (point-max) t)
+  (insert " ")
+  (kill-region (point) (point-max))
+  ;;
+  ;; go to cell after math-cell-point:
+  ;;
+  (goto-char math-cell-point)
+  (if (search-forward-regexp "^In\[[0-9]*\]\\:=" (point-max) t)
+      (progn
+        (setq math-cell-point-tmp (- (point) 1))
+        (if (search-forward-regexp "^In\[[0-9]*\]\\:=" (point-max) t)
+            (progn (goto-char (+ math-cell-point-tmp 1))
+                   (math-copy-cell "" nil (point))
+                   (setq math-cell-point math-cell-point-tmp))
+          (setq math-cell-point (- (point) 1)))))
+  (goto-char (point-max))
+  ;;
+  ;; position cursor properly:
+  ;;
+  (search-backward-regexp "^In\[[0-9]*\]\\:=" (point-min) t)
+  (search-forward-regexp "^In\[[0-9]*\]\\:=" (point-max) t)
+  (forward-char 1)
+;  (message "%s" (print math-cell-point))
+  )
+
+
+(defun math-beginning-of-line () ""
+  ;;
+  ;; by rh (Feb 01)
+  ;;
+  (interactive)
+  (beginning-of-line)
+  (if (looking-at "In\\[[0-9]*\\]:= ")
+      (search-forward-regexp "In\\[[0-9]*\\]:= " (point-max) t)
+    (if (looking-at "Out\\[[0-9]*\\]= ")
+      (search-forward-regexp "Out\\[[0-9]*\\]= " (point-max) t)))
+  )
+
+(defun math-copy-line-to-buffer () "Copy input cell to other window."
+  ;;
+  ;; by rh (Jan 98)
+  ;;
+  (interactive)
+  (setq start (point))
+  (search-backward-regexp "In\\[[0-9]*\\]:= ")
+  (search-forward-regexp ":= \?")
+  (let ((beg (point)))
+    (if (not (search-forward-regexp "Out\\[[0-9]*\\]=" (point-max) t))
+        (goto-char (point-max)) (previous-line 1))
+    (copy-region-as-kill beg (point))
+    (goto-char start))
+  (other-window 1)
+  (end-of-buffer)
+  (yank)
+  (pop-to-buffer (get-buffer "*math*"))
+)
 
 (run-hooks 'math-mode-load-hook)
 

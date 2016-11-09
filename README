@@ -1,0 +1,27 @@
+MMA-EMACS
+=========
+
+To install the math mode:
+-------------------------
+- copy the files math.el  mathem-mode.el to ~/.emacs.d/elisp
+- append to content of init.el.delta to your ~/.emacs.d/init.el
+- make sure the line
+   (load-file "~/.emacs.d/init.el")
+  is in your ~/.emacs
+
+Tweaks to use the math mode Mathematica versions >= 9.0.0
+---------------------------------------------------------
+From version 9.0.0 onwards the MathKernel is compiled with the readline
+library, which destoys the working of this math mode. If you have write
+access to the installation directory of Mma, you can fix this by
+deleting the file 'libterm.so'. If you want readline support
+nevertheless, there is a package called "rlwrap" (so set up an alias to
+'rlwrap math').
+
+Short instruction:
+------------------
+- the math-mode is loaded when a .m-file is loaded
+- start the kernel with Ctrl-Alt-M or Alt-Return
+- send a line to the kernel with Ctrl-Alt-M or Alt-Return
+- mark a region, and send the region with Ctrl+C
+
